@@ -64,7 +64,9 @@ module Sisimai
         end
         return '' if textblocks.empty?
 
-        p = textblocks.join('')
+        # Decoded text is BINARY, the rest is UTF-8. Join them as bytes to avoid the following error:
+        #   - incompatible character encodings: UTF-8 and BINARY (ASCII-8BIT)
+        p = textblocks.map(&:b).join('')
         if ctxcharset && qbencoding
           # utf8 => UTF-8
           ctxcharset = 'UTF-8' if ctxcharset.casecmp('UTF8') == 0
@@ -346,8 +348,9 @@ module Sisimai
               ctxcharset = parameter(e[0], 'charset')
               if ctxcharset.empty?
                 # The part which has no "charset" parameter causes an ArgumentError: invalid byte
-                # sequence in UTF-8 so String#scrub should be called
-                bodystring.scrub!('?')
+                # sequence in UTF-8 so String#scrub should be called. The decoded part is BINARY,
+                # where String#scrub does nothing, so it should be forced to UTF-8 first.
+                bodystring = bodystring.force_encoding('UTF-8').scrub('?')
               else
                 # ISO-8859-1, GB2312, and so on
                 bodystring = Sisimai::String.to_utf8(bodystring, ctxcharset)

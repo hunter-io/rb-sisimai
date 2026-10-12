@@ -64,6 +64,18 @@ class RFC2045Test < Minitest::Test
       refute_empty cv
       assert_match /ニャーン/, cv
     end
+
+    # Raw UTF-8 text next to an encoded word
+    cv = Sisimai::RFC2045.decodeH(['Non', 'remis:', 'café', '=?utf-8?B?UsOpdW5pb24=?='])
+    assert_equal 'Non remis: caféRéunion', cv
+    assert_equal Encoding::UTF_8, cv.encoding
+    assert_equal true, cv.valid_encoding?
+
+    cv = Sisimai::RFC2045.decodeH(['=?iso-8859-1?Q?R=E9union?=', 'café'])
+    assert_equal Encoding::UTF_8, cv.encoding
+    assert_equal true, cv.valid_encoding?
+    assert_match /\ARéunion/, cv
+
     ce = assert_raises ArgumentError do
       Sisimai::RFC2045.decodeH()
       Sisimai::RFC2045.decodeH("", "")
@@ -305,6 +317,24 @@ Received: ...
     assert_match /Received:/,   cv
     refute_match /[<]html[>]/,  cv
     refute_match /4AAQSkZJRgABAQEBLAEsAAD/, cv
+
+    # A decoded part with no "charset" parameter next to a UTF-8 part
+    ct = 'multipart/report; report-type=delivery-status; boundary="b1"'
+    p1 = "Content-Type: text/plain\n\nNon remis: café\n\n"
+    {
+      'quoted-printable' => 'Adresse introuvable =E9t=E9',
+      'base64'           => 'QWRyZXNzZSBpbnRyb3V2YWJsZSDpdOk=',
+    }.each do |e, f|
+      p2 = "Content-Type: text/plain\nContent-Transfer-Encoding: #{e}\n\n#{f}\n\n"
+      [[p1, p2], [p2, p1]].each do |g|
+        cv = Sisimai::RFC2045.makeflat(ct, "--b1\n#{g[0]}--b1\n#{g[1]}--b1--\n")
+        assert_equal Encoding::UTF_8, cv.encoding
+        assert_equal true, cv.valid_encoding?
+        assert_match /Non remis: café/, cv
+        assert_match /Adresse introuvable [?]t[?]/, cv
+      end
+    end
+
     assert_empty Sisimai::RFC2045.makeflat()
     assert_empty Sisimai::RFC2045.makeflat(nil, 'neko')
     assert_empty Sisimai::RFC2045.makeflat('neko', nil)
